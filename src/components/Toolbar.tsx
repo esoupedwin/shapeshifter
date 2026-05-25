@@ -1,3 +1,4 @@
+import paper from 'paper';
 import Dropdown from './Dropdown';
 import { useEditor } from '../store/useEditor';
 import { applyUnion, applyCombine, applyFragment, applyIntersect, applySubtract } from '../paper/boolean';
@@ -18,7 +19,9 @@ export default function Toolbar() {
   const enterEditPoints = () => {
     const sel = getSelected();
     if (sel.length !== 1) return;
-    setEditPointsTarget(sel[0]);
+    const item = sel[0];
+    if (!(item instanceof paper.Path) && !(item instanceof paper.CompoundPath)) return;
+    setEditPointsTarget(item);
     setTool('editPoints');
   };
 

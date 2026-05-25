@@ -61,7 +61,7 @@ export function duplicateSelection() {
   return clones;
 }
 
-function sortedByIndex(items: paper.PathItem[]): paper.PathItem[] {
+function sortedByIndex(items: paper.Item[]): paper.Item[] {
   return items.slice().sort((a, b) => a.index - b.index);
 }
 

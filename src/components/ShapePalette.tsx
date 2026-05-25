@@ -1,4 +1,6 @@
+import { useRef } from 'react';
 import { useEditor, ToolMode } from '../store/useEditor';
+import { insertImageFromFile } from '../paper/raster';
 
 interface ShapeDef {
   id: ToolMode;
@@ -61,6 +63,17 @@ export default function ShapePalette() {
   const defaultStroke = useEditor((s) => s.defaultStroke);
   const setDefaultFill = useEditor((s) => s.setDefaultFill);
   const setDefaultStroke = useEditor((s) => s.setDefaultStroke);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const onPickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ''; // allow re-picking the same file
+    if (!file) return;
+    insertImageFromFile(file).catch((err) => {
+      console.error('Image insert failed:', err);
+      alert('Could not load that image.');
+    });
+  };
 
   return (
     <div className="panel">
@@ -79,6 +92,22 @@ export default function ShapePalette() {
           </button>
         ))}
       </div>
+
+      <h3>Insert Picture</h3>
+      <button
+        className="btn"
+        onClick={() => fileInputRef.current?.click()}
+        style={{ width: '100%' }}
+      >
+        🖼 From file…
+      </button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={onPickFile}
+        style={{ display: 'none' }}
+      />
 
       <h3>Default Colors</h3>
       <div className="field">

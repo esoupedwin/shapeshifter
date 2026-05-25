@@ -31,7 +31,9 @@ function styleFrom(source: paper.PathItem, target: paper.PathItem) {
 
 function reduceBoolean(op: BoolOp): paper.PathItem | null {
   activateContent();
-  const items = getSelected().slice();
+  const items = getSelected().filter(
+    (i): i is paper.PathItem => i instanceof paper.Path || i instanceof paper.CompoundPath,
+  );
   if (items.length < 2) return null;
   pushProjectSnapshot();
 
@@ -94,7 +96,9 @@ export function applySubtract() {
 
 export function applyFragment() {
   activateContent();
-  const items = getSelected().slice();
+  const items = getSelected().filter(
+    (i): i is paper.PathItem => i instanceof paper.Path || i instanceof paper.CompoundPath,
+  );
   if (items.length < 2) return;
   pushProjectSnapshot();
 

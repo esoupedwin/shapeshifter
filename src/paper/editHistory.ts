@@ -74,7 +74,12 @@ export function clearHistory(pathId?: number) {
 export function pushProjectSnapshot() {
   const layer = getContentLayer();
   const items = layer.children
-    .filter((c) => c instanceof paper.Path || c instanceof paper.CompoundPath)
+    .filter(
+      (c) =>
+        c instanceof paper.Path ||
+        c instanceof paper.CompoundPath ||
+        c instanceof paper.Raster,
+    )
     .map((c) => c.exportJSON({ asString: true }) as string);
   projectStack.push(items);
   if (projectStack.length > MAX_DEPTH) projectStack.shift();

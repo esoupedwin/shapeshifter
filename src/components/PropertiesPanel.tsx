@@ -1,11 +1,16 @@
+import { useState } from 'react';
 import { useEditor } from '../store/useEditor';
 import { getSelected, notifySelectionChanged } from '../paper/selection';
+import { traceRasterToVector, TraceDetail } from '../paper/trace';
 import paper from 'paper';
 
 export default function PropertiesPanel() {
   const style = useEditor((s) => s.style);
   const transform = useEditor((s) => s.transform);
   const selectionCount = useEditor((s) => s.selectionCount);
+  const selectionIsRaster = useEditor((s) => s.selectionIsRaster);
+  const [detail, setDetail] = useState<TraceDetail>('medium');
+  const [tracing, setTracing] = useState(false);
 
   if (selectionCount === 0 || !style || !transform) {
     return (
@@ -15,6 +20,22 @@ export default function PropertiesPanel() {
       </div>
     );
   }
+
+  const runTrace = async () => {
+    const sel = getSelected();
+    if (sel.length !== 1) return;
+    const raster = sel[0];
+    if (!(raster instanceof paper.Raster)) return;
+    setTracing(true);
+    try {
+      await traceRasterToVector(raster, detail);
+    } catch (err) {
+      console.error('Trace failed:', err);
+      alert('Could not trace this image.');
+    } finally {
+      setTracing(false);
+    }
+  };
 
   const updateFill = (color: string) => {
     for (const it of getSelected()) it.fillColor = new paper.Color(color);
@@ -62,6 +83,41 @@ export default function PropertiesPanel() {
 
   return (
     <div className="panel right">
+      {selectionIsRaster && (
+        <>
+          <h3>Convert to Shape</h3>
+          <div className="field">
+            <label>Detail</label>
+            <select
+              value={detail}
+              onChange={(e) => setDetail(e.target.value as TraceDetail)}
+              disabled={tracing}
+              style={{
+                background: '#383838',
+                border: '1px solid #4a4a4a',
+                color: '#e6e6e6',
+                padding: '4px 6px',
+                fontSize: 12,
+                borderRadius: 3,
+                width: '100%',
+              }}
+            >
+              <option value="low">Low — fewer, chunkier paths</option>
+              <option value="medium">Medium — balanced</option>
+              <option value="high">High — denser anchors</option>
+            </select>
+          </div>
+          <button
+            className="btn"
+            onClick={runTrace}
+            disabled={tracing}
+            style={{ width: '100%' }}
+          >
+            {tracing ? 'Tracing…' : '✎ Convert to editable vector'}
+          </button>
+        </>
+      )}
+
       <h3>Shape Fill</h3>
       <div className="row">
         <div className="field">

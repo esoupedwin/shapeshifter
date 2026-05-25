@@ -3,12 +3,20 @@ import { getContentLayer, getOverlayLayer, activateOverlay, activateContent } fr
 import { useEditor, SelectionStyle, SelectionTransform } from '../store/useEditor';
 import { clearHistory } from './editHistory';
 
-const selected: paper.PathItem[] = [];
+const selected: paper.Item[] = [];
 let editPointsTarget: paper.PathItem | null = null;
 let selectedSegment: { pathId: number; index: number } | null = null;
 
-export function getSelected(): paper.PathItem[] {
+export function getSelected(): paper.Item[] {
   return selected.slice();
+}
+
+function isSelectable(item: paper.Item): boolean {
+  return (
+    item instanceof paper.Path ||
+    item instanceof paper.CompoundPath ||
+    item instanceof paper.Raster
+  );
 }
 
 export function getEditPointsTarget(): paper.PathItem | null {
@@ -45,21 +53,21 @@ export function clearSelection() {
   pushToStore();
 }
 
-export function selectItem(item: paper.PathItem, additive = false) {
+export function selectItem(item: paper.Item, additive = false) {
   if (!additive) selected.length = 0;
   if (!selected.includes(item)) selected.push(item);
   refreshOverlay();
   pushToStore();
 }
 
-export function setSelection(items: paper.PathItem[]) {
+export function setSelection(items: paper.Item[]) {
   selected.length = 0;
   selected.push(...items);
   refreshOverlay();
   pushToStore();
 }
 
-export function toggleItem(item: paper.PathItem) {
+export function toggleItem(item: paper.Item) {
   const idx = selected.indexOf(item);
   if (idx >= 0) selected.splice(idx, 1);
   else selected.push(item);
@@ -67,11 +75,11 @@ export function toggleItem(item: paper.PathItem) {
   pushToStore();
 }
 
-export function isSelected(item: paper.PathItem): boolean {
+export function isSelected(item: paper.Item): boolean {
   return selected.includes(item);
 }
 
-export function hitTestSelectable(point: paper.Point): paper.PathItem | null {
+export function hitTestSelectable(point: paper.Point): paper.Item | null {
   const layer = getContentLayer();
   const result = layer.hitTest(point, {
     fill: true,
@@ -82,9 +90,7 @@ export function hitTestSelectable(point: paper.Point): paper.PathItem | null {
   if (!result || !result.item) return null;
   let item: paper.Item | null = result.item;
   while (item && item.parent && item.parent !== layer) item = item.parent;
-  if (item && (item instanceof paper.Path || item instanceof paper.CompoundPath)) {
-    return item as paper.PathItem;
-  }
+  if (item && isSelectable(item)) return item;
   return null;
 }
 
@@ -282,17 +288,21 @@ function pushToStore() {
   const items = selected;
   if (items.length === 0) {
     useEditor.getState().setSelection([], null, null);
+    useEditor.getState().setSelectionIsRaster(false);
     refreshLayerNames();
     return;
   }
 
   const first = items[0];
+  const firstFill = (first as any).fillColor as paper.Color | null | undefined;
+  const firstStroke = (first as any).strokeColor as paper.Color | null | undefined;
+  const firstStrokeWidth = (first as any).strokeWidth as number | undefined;
   const style: SelectionStyle = {
-    fill: first.fillColor ? first.fillColor.toCSS(true) : '#000000',
-    stroke: first.strokeColor ? first.strokeColor.toCSS(true) : '#000000',
-    strokeWidth: first.strokeWidth ?? 0,
-    hasStroke: !!first.strokeColor && (first.strokeWidth ?? 0) > 0,
-    hasFill: !!first.fillColor,
+    fill: firstFill ? firstFill.toCSS(true) : '#000000',
+    stroke: firstStroke ? firstStroke.toCSS(true) : '#000000',
+    strokeWidth: firstStrokeWidth ?? 0,
+    hasStroke: !!firstStroke && (firstStrokeWidth ?? 0) > 0,
+    hasFill: !!firstFill,
   };
 
   let bounds: paper.Rectangle | null = null;
@@ -310,17 +320,23 @@ function pushToStore() {
     : { x: 0, y: 0, width: 0, height: 0, rotation: 0 };
 
   useEditor.getState().setSelection(items.map((i) => i.id), style, transform);
+  useEditor
+    .getState()
+    .setSelectionIsRaster(items.length === 1 && items[0] instanceof paper.Raster);
   refreshLayerNames();
 }
 
 export function refreshLayerNames() {
   const layer = getContentLayer();
   const names = layer.children
-    .filter((c) => c instanceof paper.Path || c instanceof paper.CompoundPath)
-    .map((c, idx) => ({
-      id: c.id,
-      name: `${c instanceof paper.CompoundPath ? 'Compound' : 'Shape'} ${idx + 1}`,
-    }))
+    .filter((c) => isSelectable(c))
+    .map((c, idx) => {
+      let kind: string;
+      if (c instanceof paper.Raster) kind = 'Image';
+      else if (c instanceof paper.CompoundPath) kind = 'Compound';
+      else kind = 'Shape';
+      return { id: c.id, name: `${kind} ${idx + 1}` };
+    })
     .reverse();
   useEditor.getState().setLayerNames(names);
 }
@@ -330,12 +346,10 @@ export function notifySelectionChanged() {
   refreshOverlay();
 }
 
-export function findItemById(id: number): paper.PathItem | null {
+export function findItemById(id: number): paper.Item | null {
   const layer = getContentLayer();
   for (const child of layer.children) {
-    if (child.id === id && (child instanceof paper.Path || child instanceof paper.CompoundPath)) {
-      return child as paper.PathItem;
-    }
+    if (child.id === id && isSelectable(child)) return child;
   }
   return null;
 }

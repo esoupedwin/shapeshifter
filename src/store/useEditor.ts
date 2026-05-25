@@ -45,6 +45,7 @@ interface EditorState {
   defaultFill: string;
   defaultStroke: string;
   contextMenu: ContextMenuState | null;
+  selectionIsRaster: boolean;
   setTool: (t: ToolMode) => void;
   setSelection: (
     ids: number[],
@@ -56,6 +57,7 @@ interface EditorState {
   setDefaultFill: (c: string) => void;
   setDefaultStroke: (c: string) => void;
   setContextMenu: (cm: ContextMenuState | null) => void;
+  setSelectionIsRaster: (v: boolean) => void;
   bumpSelection: () => void;
 }
 
@@ -71,6 +73,7 @@ export const useEditor = create<EditorState>((set) => ({
   defaultFill: '#ED7D31',
   defaultStroke: '#1F3864',
   contextMenu: null,
+  selectionIsRaster: false,
   setTool: (tool) => set({ tool }),
   setSelection: (selectedIds, style, transform) =>
     set({ selectedIds, selectionCount: selectedIds.length, style, transform }),
@@ -79,5 +82,6 @@ export const useEditor = create<EditorState>((set) => ({
   setDefaultFill: (defaultFill) => set({ defaultFill }),
   setDefaultStroke: (defaultStroke) => set({ defaultStroke }),
   setContextMenu: (contextMenu) => set({ contextMenu }),
+  setSelectionIsRaster: (selectionIsRaster) => set({ selectionIsRaster }),
   bumpSelection: () => set((s) => ({ selectionVersion: s.selectionVersion + 1 })),
 }));
