@@ -9,8 +9,27 @@ import paper from 'paper';
 import { deleteSelection } from './paper/arrange';
 import { useEditor } from './store/useEditor';
 import { zoomIn, zoomOut, setZoom, fitContent } from './paper/view';
-import { undo as undoEdit, undoProject } from './paper/editHistory';
-import { getEditPointsTarget, notifySelectionChanged, refreshOverlay, clearSelection, refreshLayerNames } from './paper/selection';
+import { undo as undoEdit, undoProject, pushSnapshot } from './paper/editHistory';
+import { copySelection } from './paper/clipboard';
+import {
+  getEditPointsTarget,
+  getSelectedSegment,
+  setSelectedSegment,
+  notifySelectionChanged,
+  refreshOverlay,
+  clearSelection,
+  refreshLayerNames,
+} from './paper/selection';
+
+function findPathById(target: paper.PathItem, pathId: number): paper.Path | null {
+  if (target instanceof paper.Path && target.id === pathId) return target;
+  if (target instanceof paper.CompoundPath) {
+    for (const child of target.children) {
+      if (child instanceof paper.Path && child.id === pathId) return child;
+    }
+  }
+  return null;
+}
 
 export default function App() {
   useEffect(() => {
@@ -18,6 +37,25 @@ export default function App() {
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
       if (e.key === 'Delete' || e.key === 'Backspace') {
+        // In edit-points mode with an anchor selected, Delete removes that
+        // anchor (not the whole shape). Falls through to deleteSelection
+        // when no anchor is selected.
+        if (useEditor.getState().tool === 'editPoints') {
+          const editTarget = getEditPointsTarget();
+          const segSel = getSelectedSegment();
+          if (editTarget && segSel) {
+            const path = findPathById(editTarget, segSel.pathId);
+            if (path && path.segments.length > 3) {
+              e.preventDefault();
+              pushSnapshot(path);
+              path.removeSegment(segSel.index);
+              setSelectedSegment(null, null);
+              refreshOverlay();
+              notifySelectionChanged();
+              return;
+            }
+          }
+        }
         e.preventDefault();
         deleteSelection();
       } else if (e.key === 'Escape') {
@@ -34,7 +72,14 @@ export default function App() {
       } else if ((e.ctrlKey || e.metaKey) && e.key === '1') {
         e.preventDefault();
         fitContent();
-      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+        if (copySelection() > 0) e.preventDefault();
+      }
+      // Note: Ctrl+V is intentionally NOT handled here. The browser will fire
+      // a `paste` event in response, which we handle in Canvas.tsx — there we
+      // can inspect ClipboardData (PowerPoint shapes arrive as image/png) and
+      // fall back to the in-app clipboard if the system clipboard is empty.
+      else if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
         if (useEditor.getState().tool === 'editPoints') {
           const target = getEditPointsTarget();
           if (target) {

@@ -2,7 +2,22 @@ import { useState } from 'react';
 import { useEditor } from '../store/useEditor';
 import { getSelected, notifySelectionChanged } from '../paper/selection';
 import { traceRasterToVector, TraceDetail } from '../paper/trace';
+import { smoothSelection, DEFAULT_CORNER_THRESHOLD } from '../paper/smooth';
+import { pushProjectSnapshot } from '../paper/editHistory';
 import paper from 'paper';
+
+// Coalesce rapid Properties-Panel edits into one undo entry. Slider drags and
+// repeated arrow-key bumps within 500 ms collapse to a single snapshot; the
+// next change after a 500 ms idle starts a fresh undo entry.
+let lastPropertiesSnapshotAt = 0;
+const PROPERTIES_COALESCE_MS = 500;
+function snapshotForPropertyEdit() {
+  const now = Date.now();
+  if (now - lastPropertiesSnapshotAt > PROPERTIES_COALESCE_MS) {
+    pushProjectSnapshot();
+    lastPropertiesSnapshotAt = now;
+  }
+}
 
 export default function PropertiesPanel() {
   const style = useEditor((s) => s.style);
@@ -11,6 +26,7 @@ export default function PropertiesPanel() {
   const selectionIsRaster = useEditor((s) => s.selectionIsRaster);
   const [detail, setDetail] = useState<TraceDetail>('medium');
   const [tracing, setTracing] = useState(false);
+  const [cornerThreshold, setCornerThreshold] = useState<number>(DEFAULT_CORNER_THRESHOLD);
 
   if (selectionCount === 0 || !style || !transform) {
     return (
@@ -37,27 +53,40 @@ export default function PropertiesPanel() {
     }
   };
 
+  const hasPathSelection = !selectionIsRaster && getSelected().some(
+    (it) => it instanceof paper.Path || it instanceof paper.CompoundPath,
+  );
+
+  const runSmooth = () => {
+    smoothSelection(cornerThreshold);
+  };
+
   const updateFill = (color: string) => {
+    snapshotForPropertyEdit();
     for (const it of getSelected()) it.fillColor = new paper.Color(color);
     notifySelectionChanged();
   };
 
   const updateStroke = (color: string) => {
+    snapshotForPropertyEdit();
     for (const it of getSelected()) it.strokeColor = new paper.Color(color);
     notifySelectionChanged();
   };
 
   const updateStrokeWidth = (w: number) => {
+    snapshotForPropertyEdit();
     for (const it of getSelected()) it.strokeWidth = w;
     notifySelectionChanged();
   };
 
   const removeFill = () => {
+    snapshotForPropertyEdit();
     for (const it of getSelected()) it.fillColor = null;
     notifySelectionChanged();
   };
 
   const removeStroke = () => {
+    snapshotForPropertyEdit();
     for (const it of getSelected()) it.strokeColor = null;
     notifySelectionChanged();
   };
@@ -65,6 +94,7 @@ export default function PropertiesPanel() {
   const applyTransform = (field: 'x' | 'y' | 'width' | 'height' | 'rotation', value: number) => {
     const sel = getSelected();
     if (sel.length !== 1) return;
+    snapshotForPropertyEdit();
     const it = sel[0];
     if (field === 'x') it.position = new paper.Point(value + it.bounds.width / 2, it.position.y);
     else if (field === 'y') it.position = new paper.Point(it.position.x, value + it.bounds.height / 2);
@@ -114,6 +144,31 @@ export default function PropertiesPanel() {
             style={{ width: '100%' }}
           >
             {tracing ? 'Tracing…' : '✎ Convert to editable vector'}
+          </button>
+        </>
+      )}
+
+      {hasPathSelection && (
+        <>
+          <h3>Smooth Curves</h3>
+          <div className="field">
+            <label>Corner threshold: {cornerThreshold}°</label>
+            <input
+              type="range"
+              min={20}
+              max={170}
+              step={5}
+              value={cornerThreshold}
+              onChange={(e) => setCornerThreshold(Number(e.target.value))}
+            />
+          </div>
+          <button
+            className="btn"
+            onClick={runSmooth}
+            style={{ width: '100%' }}
+            title="Smooth polygonal arcs while keeping sharp corners. Lower the threshold (~60°) to preserve sharp polygon corners; raise it (~120°) to fully smooth rounded shapes."
+          >
+            ⌒ Smooth curves
           </button>
         </>
       )}

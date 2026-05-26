@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import paper from 'paper';
-import { setupPaper } from '../paper/setup';
+import { setupPaper, getOverlayLayer } from '../paper/setup';
 import { initTools } from '../paper/tools';
 import * as selection from '../paper/selection';
 import * as boolean from '../paper/boolean';
@@ -9,6 +9,33 @@ import * as exportMod from '../paper/export';
 import * as viewMod from '../paper/view';
 import { useEditor } from '../store/useEditor';
 import { refreshLayerNames } from '../paper/selection';
+import { tryPasteExternal } from '../paper/clipboardExternal';
+import { pasteClipboard } from '../paper/clipboard';
+
+function cursorForHandle(handle: string): string {
+  switch (handle) {
+    case 'nw':
+    case 'se':
+      return 'nwse-resize';
+    case 'ne':
+    case 'sw':
+      return 'nesw-resize';
+    case 'n':
+    case 's':
+      return 'ns-resize';
+    case 'e':
+    case 'w':
+      return 'ew-resize';
+    case 'rotate':
+      return 'grab';
+    case 'seg':
+    case 'handleIn':
+    case 'handleOut':
+      return 'move';
+    default:
+      return '';
+  }
+}
 
 export default function Canvas() {
   const ref = useRef<HTMLCanvasElement | null>(null);
@@ -89,7 +116,36 @@ export default function Canvas() {
         e.stopPropagation();
       }
     };
+    const updateHoverCursor = (e: PointerEvent) => {
+      if (panning) {
+        canvas.style.cursor = 'grabbing';
+        return;
+      }
+      if (spaceHeld) {
+        canvas.style.cursor = 'grab';
+        return;
+      }
+      // Hit-test overlay for selection handles / segment dots / bezier handles.
+      const rect = canvas.getBoundingClientRect();
+      const viewPt = new paper.Point(e.clientX - rect.left, e.clientY - rect.top);
+      const projectPt = paper.view.viewToProject(viewPt);
+      const overlay = getOverlayLayer();
+      const hit = overlay.hitTest(projectPt, { fill: true, stroke: true, tolerance: 5 });
+      const handle = hit && hit.item && (hit.item.data.handle as string | undefined);
+      if (handle) {
+        canvas.style.cursor = cursorForHandle(handle);
+        return;
+      }
+      // Fall back to the tool's default cursor (crosshair while drawing,
+      // default otherwise).
+      const tool = useEditor.getState().tool;
+      if (tool.startsWith('draw')) canvas.style.cursor = 'crosshair';
+      else if (tool === 'editPoints') canvas.style.cursor = 'default';
+      else canvas.style.cursor = '';
+    };
+
     const onPointerMove = (e: PointerEvent) => {
+      updateHoverCursor(e);
       if (!panning || !lastClient) return;
       const dx = e.clientX - lastClient.x;
       const dy = e.clientY - lastClient.y;
@@ -105,8 +161,34 @@ export default function Canvas() {
       }
     };
 
+    // System-clipboard paste — for images / SVG copied from PowerPoint, browsers,
+    // screenshot tools, etc. Tries external content first (so a fresh PowerPoint
+    // copy beats stale in-app clipboard); falls back to internal Ctrl+C/V buffer
+    // when the system clipboard has nothing usable.
+    const onPaste = async (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+
+      const handledExternal = await tryPasteExternal(e.clipboardData);
+      if (handledExternal) {
+        e.preventDefault();
+        return;
+      }
+
+      // Diagnostic: log what was on the clipboard so we can see when an
+      // unsupported format slips through (e.g. PowerPoint-only formats).
+      if (e.clipboardData && import.meta.env.DEV) {
+        const types = Array.from(e.clipboardData.items).map((it) => `${it.kind}:${it.type}`);
+        if (types.length > 0) console.warn('[paste] no usable item; clipboard had:', types);
+      }
+
+      // Fall back to the in-app clipboard so Ctrl+C/Ctrl+V inside the app still works.
+      if (pasteClipboard().length > 0) e.preventDefault();
+    };
+
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('paste', onPaste);
     canvas.addEventListener('pointerdown', onPointerDown, true);
     canvas.addEventListener('pointermove', onPointerMove, true);
     canvas.addEventListener('pointerup', onPointerUp, true);
@@ -128,6 +210,7 @@ export default function Canvas() {
       canvas.removeEventListener('wheel', onWheel);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('paste', onPaste);
       canvas.removeEventListener('pointerdown', onPointerDown, true);
       canvas.removeEventListener('pointermove', onPointerMove, true);
       canvas.removeEventListener('pointerup', onPointerUp, true);

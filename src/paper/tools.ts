@@ -23,7 +23,7 @@ import {
   setSelectedSegment,
   getSelectedSegment,
 } from './selection';
-import { pushSnapshot } from './editHistory';
+import { pushSnapshot, pushProjectSnapshot } from './editHistory';
 
 let tool: paper.Tool | null = null;
 let currentMode: ToolMode = 'select';
@@ -41,6 +41,9 @@ let dragSegment: { path: paper.Path; index: number } | null = null;
 let dragBezier: { path: paper.Path; index: number; which: 'handleIn' | 'handleOut' } | null = null;
 let dragCurve: { path: paper.Path; curveIndex: number } | null = null;
 let marqueeRect: paper.Path.Rectangle | null = null;
+// Snapshots fire on the FIRST drag iteration that mutates content, so a
+// drag-but-no-movement doesn't pollute the undo stack with no-op entries.
+let dragProjectSnapshotPushed: boolean = false;
 
 export function initTools() {
   if (tool) return;
@@ -81,6 +84,7 @@ function hitTestOverlay(point: paper.Point) {
 function onMouseDown(event: paper.ToolEvent) {
   dragStartPoint = event.point.clone();
   dragOriginalPositions = new Map();
+  dragProjectSnapshotPushed = false;
 
   if (
     currentMode === 'drawRect' ||
@@ -224,6 +228,21 @@ function onMouseDown(event: paper.ToolEvent) {
 }
 
 function onMouseDrag(event: paper.ToolEvent) {
+  // First-drag snapshot for any operation that mutates content. We snapshot
+  // *here* (not in onMouseDown) so a stationary click — which never enters
+  // drag — doesn't leave a no-op entry on the undo stack.
+  if (!dragProjectSnapshotPushed) {
+    const willMutate =
+      drawStart !== null ||
+      dragMode === 'move' ||
+      dragMode === 'resize' ||
+      dragMode === 'rotate';
+    if (willMutate) {
+      pushProjectSnapshot();
+      dragProjectSnapshotPushed = true;
+    }
+  }
+
   // Drawing
   if (drawStart) {
     if (drawingPath) drawingPath.remove();
@@ -327,6 +346,59 @@ function onMouseDrag(event: paper.ToolEvent) {
     if (dragHandle.includes('e')) newRight = orig.right + dx;
     if (dragHandle.includes('n')) newTop = orig.top + dy;
     if (dragHandle.includes('s')) newBottom = orig.bottom + dy;
+
+    // Shift = preserve aspect ratio (PowerPoint behavior).
+    if (event.modifiers.shift && orig.width > 0 && orig.height > 0) {
+      const isCorner =
+        dragHandle === 'nw' || dragHandle === 'ne' ||
+        dragHandle === 'sw' || dragHandle === 'se';
+
+      if (isCorner) {
+        // Dominant axis leads. The non-dominant axis is recomputed so the
+        // scale factor is uniform. The anchor is the opposite corner.
+        const propScaleX = (newRight - newLeft) / orig.width;
+        const propScaleY = (newBottom - newTop) / orig.height;
+        const factor =
+          Math.abs(propScaleX - 1) >= Math.abs(propScaleY - 1)
+            ? propScaleX
+            : propScaleY;
+        const targetW = orig.width * factor;
+        const targetH = orig.height * factor;
+        const anchorX = dragHandle.includes('w') ? orig.right : orig.left;
+        const anchorY = dragHandle.includes('n') ? orig.bottom : orig.top;
+        if (dragHandle.includes('w')) {
+          newLeft = anchorX - targetW;
+          newRight = anchorX;
+        } else {
+          newLeft = anchorX;
+          newRight = anchorX + targetW;
+        }
+        if (dragHandle.includes('n')) {
+          newTop = anchorY - targetH;
+          newBottom = anchorY;
+        } else {
+          newTop = anchorY;
+          newBottom = anchorY + targetH;
+        }
+      } else {
+        // Edge handle: scale the perpendicular axis symmetrically around the
+        // original center on that axis so the bbox stays aspect-locked.
+        if (dragHandle === 'e' || dragHandle === 'w') {
+          const scale = (newRight - newLeft) / orig.width;
+          const newH = orig.height * scale;
+          const cy = (orig.top + orig.bottom) / 2;
+          newTop = cy - newH / 2;
+          newBottom = cy + newH / 2;
+        } else {
+          // 'n' or 's'
+          const scale = (newBottom - newTop) / orig.height;
+          const newW = orig.width * scale;
+          const cx = (orig.left + orig.right) / 2;
+          newLeft = cx - newW / 2;
+          newRight = cx + newW / 2;
+        }
+      }
+    }
 
     const newWidth = Math.max(5, newRight - newLeft);
     const newHeight = Math.max(5, newBottom - newTop);

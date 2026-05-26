@@ -6,12 +6,39 @@ import { setSelection, refreshLayerNames, refreshOverlay } from './selection';
 
 export type TraceDetail = 'low' | 'medium' | 'high';
 
-// Tuning: lower numberofcolors = chunkier; higher pathomit = drops more noise;
-// blur only on "low" because it loses small detail (e.g. cone tip, drips).
-const PRESETS: Record<TraceDetail, Record<string, number>> = {
-  low:    { numberofcolors: 2,  ltres: 1,   qtres: 1,   pathomit: 16, blurradius: 3, blurdelta: 20, colorquantcycles: 3 },
-  medium: { numberofcolors: 8,  ltres: 1,   qtres: 1,   pathomit: 4,  blurradius: 0, blurdelta: 0,  colorquantcycles: 3 },
-  high:   { numberofcolors: 16, ltres: 0.5, qtres: 0.5, pathomit: 1,  blurradius: 0, blurdelta: 0,  colorquantcycles: 4 },
+// Tuning:
+// - qtres=0.01 ("sharp" preset from imagetracerjs) keeps polygon corners as
+//   actual corners instead of curves. Critical for stars / arrows / chevrons.
+// - 2 colors at Low/Medium binarizes icons cleanly (foreground + background).
+// - rightangleenhance preserves 90° corners that survive antialiasing.
+// - blur only on Low (chunky); destroys small details on Medium/High.
+const PRESETS: Record<TraceDetail, Record<string, number | boolean>> = {
+  low: {
+    numberofcolors: 2,
+    ltres: 1, qtres: 1,
+    pathomit: 24,
+    blurradius: 4, blurdelta: 20,
+    colorquantcycles: 2,
+    rightangleenhance: true,
+  },
+  medium: {
+    numberofcolors: 2,
+    ltres: 1, qtres: 0.01,
+    pathomit: 8,
+    blurradius: 0, blurdelta: 0,
+    colorquantcycles: 2,
+    rightangleenhance: true,
+    linefilter: true,
+  },
+  high: {
+    numberofcolors: 8,
+    ltres: 1, qtres: 0.01,
+    pathomit: 2,
+    blurradius: 0, blurdelta: 0,
+    colorquantcycles: 3,
+    rightangleenhance: true,
+    linefilter: true,
+  },
 };
 
 function readImageData(raster: paper.Raster): ImageData | null {
@@ -148,17 +175,10 @@ export async function traceRasterToVector(
     if (color !== 'none' && color !== 'transparent') {
       merged.fillColor = new paper.Color(color);
     }
-    // Only simplify if there's a lot of redundant geometry. Aggressive
-    // simplification on already-clean paths destroys corners.
-    const segs = segmentCount(merged);
-    if (segs > 60) {
-      if (merged instanceof paper.Path) merged.simplify(0.8);
-      else if (merged instanceof paper.CompoundPath) {
-        for (const c of merged.children) {
-          if (c instanceof paper.Path) c.simplify(0.8);
-        }
-      }
-    }
+    // Do NOT call simplify() — its spline fitter rounds sharp polygon corners
+    // (a star's 36° tips end up looking like bubbles). The trace output is
+    // already clean once qtres is low; users can manually simplify via Edit
+    // Points if they want fewer anchors.
     paths.push(merged);
   }
 

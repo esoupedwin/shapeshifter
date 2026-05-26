@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { useEditor, ToolMode } from '../store/useEditor';
 import { insertImageFromFile } from '../paper/raster';
+import { pasteFromSystemClipboard } from '../paper/clipboardExternal';
 
 interface ShapeDef {
   id: ToolMode;
@@ -97,9 +98,20 @@ export default function ShapePalette() {
       <button
         className="btn"
         onClick={() => fileInputRef.current?.click()}
-        style={{ width: '100%' }}
+        style={{ width: '100%', marginBottom: 4 }}
       >
         🖼 From file…
+      </button>
+      <button
+        className="btn"
+        onClick={async () => {
+          const ok = await pasteFromSystemClipboard().catch(() => false);
+          if (!ok) alert('No image found on the clipboard. Copy a shape in PowerPoint (or any image) and try again.');
+        }}
+        style={{ width: '100%' }}
+        title="Read the system clipboard (PowerPoint, screenshots, etc.) and insert any image found"
+      >
+        📋 Paste from clipboard
       </button>
       <input
         ref={fileInputRef}

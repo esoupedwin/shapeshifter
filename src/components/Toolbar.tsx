@@ -6,6 +6,7 @@ import { exportPNG, exportSVG } from '../paper/export';
 import { bringForward, sendBackward, bringToFront, sendToBack, deleteSelection } from '../paper/arrange';
 import { getSelected, setEditPointsTarget } from '../paper/selection';
 import { zoomIn, zoomOut, resetView, fitContent, setZoom } from '../paper/view';
+import { rotateRight90, rotateLeft90, flipHorizontal, flipVertical } from '../paper/transform';
 
 export default function Toolbar() {
   const selectionCount = useEditor((s) => s.selectionCount);
@@ -64,6 +65,13 @@ export default function Toolbar() {
           <button onClick={sendToBack}>⇊ Send to Back</button>
           <button onClick={deleteSelection}>🗑 Delete</button>
         </Dropdown>
+
+        <Dropdown label="Rotate" disabled={selectionCount === 0}>
+          <button onClick={rotateRight90}>↻ Rotate Right 90°</button>
+          <button onClick={rotateLeft90}>↺ Rotate Left 90°</button>
+          <button onClick={flipVertical}>⇕ Flip Vertical</button>
+          <button onClick={flipHorizontal}>⇔ Flip Horizontal</button>
+        </Dropdown>
       </div>
 
       <div className="group">
@@ -90,7 +98,7 @@ export default function Toolbar() {
       <div className="group" style={{ fontSize: 11, color: '#888' }}>
         {tool === 'editPoints' && (
           <span>
-            Edit Points: click anchor to select • drag curve to bend • shift+click edge to insert • alt+click delete • Ctrl+Z undo
+            Edit Points: click anchor to select • Delete to remove • drag curve to bend • shift+click edge to insert • Ctrl+Z undo
           </span>
         )}
         {tool !== 'editPoints' && selectionCount > 0 && (

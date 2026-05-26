@@ -1,6 +1,6 @@
 import paper from 'paper';
 import { useEditor } from '../store/useEditor';
-import { refreshOverlay } from './selection';
+import { refreshOverlay, getSelected } from './selection';
 
 export const MIN_ZOOM = 0.1;
 export const MAX_ZOOM = 10;
@@ -32,12 +32,36 @@ export function zoomAt(viewPoint: paper.Point, factor: number) {
   setZoom(paper.view.zoom * factor, projectPoint);
 }
 
+function selectionCenter(): paper.Point | null {
+  const items = getSelected();
+  if (items.length === 0) return null;
+  let bounds: paper.Rectangle | null = null;
+  for (const it of items) bounds = bounds ? bounds.unite(it.bounds) : it.bounds;
+  return bounds ? bounds.center : null;
+}
+
+// Like setZoom, but when a shape is selected, the new view center is the
+// selection's bbox center — so zooming via +/- (or Ctrl+=) draws the selection
+// toward the middle of the canvas, the way PowerPoint does. Falls through to
+// the plain setZoom when nothing is selected.
+function setZoomCenteredOnSelection(z: number) {
+  const center = selectionCenter();
+  if (!center) {
+    setZoom(z);
+    return;
+  }
+  paper.view.zoom = clamp(z);
+  paper.view.center = center;
+  refreshOverlay();
+  publishZoom();
+}
+
 export function zoomIn() {
-  setZoom(paper.view.zoom * 1.25);
+  setZoomCenteredOnSelection(paper.view.zoom * 1.25);
 }
 
 export function zoomOut() {
-  setZoom(paper.view.zoom / 1.25);
+  setZoomCenteredOnSelection(paper.view.zoom / 1.25);
 }
 
 export function resetView() {
