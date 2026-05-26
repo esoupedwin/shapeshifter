@@ -65,6 +65,13 @@ function readImageData(raster: paper.Raster): ImageData | null {
   off.height = h;
   const ctx = off.getContext('2d');
   if (!ctx) return null;
+  // Pre-composite on white so transparent pixels become white instead of
+  // RGBA(0,0,0,0). Without this, transparent-background images have the same
+  // RGB(0,0,0) as opaque-black pixels; toCSS(true) then strips alpha and
+  // groups both into the same '#000000' bucket, causing them to be merged into
+  // a single full-image rectangle instead of the actual shape.
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
   ctx.drawImage(img as CanvasImageSource, 0, 0);
   return ctx.getImageData(0, 0, w, h);
 }
@@ -201,11 +208,16 @@ export async function traceRasterToVector(
   temp.translate(center);
   temp.applyMatrix = true; // bake transforms into children
 
+  // Insert paths in order so that the first path (typically the background)
+  // lands at rasterIndex and each subsequent path is stacked above it.
+  // Inserting everything at the same rasterIndex reverses the order, putting
+  // the background on top and covering the foreground shapes.
   const finalPaths: paper.PathItem[] = [];
+  let insertIdx = rasterIndex;
   for (const p of temp.children.slice() as paper.PathItem[]) {
     p.remove();
     p.applyMatrix = true;
-    if (parent) parent.insertChild(rasterIndex, p);
+    if (parent) parent.insertChild(insertIdx++, p);
     finalPaths.push(p);
   }
   temp.remove();

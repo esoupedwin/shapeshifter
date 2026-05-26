@@ -31,12 +31,46 @@ function isCornerAtIndex(
   return turnAngleAt(path, index) >= thresholdDeg;
 }
 
-// Tolerance for simplifying the polyline between corners — passed to paper's
-// Schneider bezier fitter. Smaller = more anchors kept (more faithful to input
-// silhouette), larger = fewer anchors (more aggressive smoothing). At 2.5 px,
-// gently-rounded arcs (a few px deep) get flattened into near-straight lines,
-// which sharpens puffy tips. 1.0 keeps the silhouette honest.
-const SIMPLIFY_TOLERANCE = 1.0;
+// Catmull-Rom is an *interpolating* spline: the fitted curve passes through
+// every control point exactly. Using it instead of Schneider's simplify()
+// preserves the silhouette pixel-perfectly while converting straight-line
+// polygon edges to smooth Bézier arcs.
+//
+// Why not simplify()? simplify() is a *approximating* fitter — it is allowed
+// to discard intermediate anchors and fit a Bézier that stays within a
+// tolerance of the original points. That means inner concave anchors (the
+// "armpits" of a star) can be dropped: without them the fitter bridges across
+// the concavity and the V-shape disappears. Catmull-Rom never drops a point,
+// so every traced feature survives.
+const SMOOTH_TYPE = 'catmull-rom' as const;
+
+/**
+ * Returns the indices of the four axis-extreme anchor points (leftmost,
+ * rightmost, topmost, bottommost). These are pinned as forced corners so
+ * that Schneider-simplify can never drift the overall bounding box.
+ *
+ * Why this matters: a rounded star tip spreads its ~144° turn across 3–4
+ * polyline segments (~48° each). No single segment exceeds a typical threshold
+ * (e.g. 115°), so none are detected as corners. Without extrema pinning,
+ * path.simplify() fits a Bézier with up to ±1 px tolerance per run; across
+ * the whole outline those errors compound to a measurable height/width change.
+ * Pinning the four extreme vertices costs at most four extra corner splits and
+ * guarantees the bounding box of the output matches the input exactly.
+ */
+function bboxExtremaIndices(path: paper.Path): number[] {
+  const segs = path.segments;
+  const n = segs.length;
+  if (n === 0) return [];
+  let minXi = 0, maxXi = 0, minYi = 0, maxYi = 0;
+  for (let i = 1; i < n; i++) {
+    const p = segs[i].point;
+    if (p.x < segs[minXi].point.x) minXi = i;
+    if (p.x > segs[maxXi].point.x) maxXi = i;
+    if (p.y < segs[minYi].point.y) minYi = i;
+    if (p.y > segs[maxYi].point.y) maxYi = i;
+  }
+  return [...new Set([minXi, maxXi, minYi, maxYi])];
+}
 
 function smoothOnePath(path: paper.Path, thresholdDeg: number) {
   const n = path.segments.length;
@@ -57,15 +91,31 @@ function smoothOnePath(path: paper.Path, thresholdDeg: number) {
     if (isCornerAtIndex(path, i, thresholdDeg)) cornerIndices.push(i);
   }
 
-  // No corners: simplify the whole path with Schneider's bezier fitter.
+  // Always pin the four bounding-box extrema as corners regardless of the
+  // angle threshold. This prevents the Schneider fitter from drifting the
+  // overall dimensions (e.g. a rounded star traced at low detail has its tip
+  // turn spread across several segments, none above threshold; without pinning,
+  // simplify() shortens the star by several pixels).
+  for (const idx of bboxExtremaIndices(path)) {
+    if (!cornerIndices.includes(idx)) cornerIndices.push(idx);
+  }
+  cornerIndices.sort((a, b) => a - b);
+
+  // No corners: smooth the whole path in place.
   if (cornerIndices.length === 0) {
-    path.simplify(SIMPLIFY_TOLERANCE);
+    path.smooth({ type: SMOOTH_TYPE });
     return;
   }
 
-  // Walk corner→corner, fit smooth cubic Beziers through the interior anchors
+  // Walk corner→corner, fit smooth cubic Béziers through the interior anchors
   // of each run, and stitch the result back into a single path. Corners get
   // re-added with zero handles so they stay mathematically sharp.
+  //
+  // We use Catmull-Rom (interpolating) rather than Schneider simplify
+  // (approximating) so that every anchor in each run is preserved at its
+  // exact position. This means inner concaves, rounded tips, and any other
+  // traced feature survive unchanged — only the straight-line polygon edges
+  // between anchors are replaced by smooth Bézier arcs.
   const wasClosed = path.closed;
   const newSegments: paper.Segment[] = [];
   for (let ci = 0; ci < cornerIndices.length; ci++) {
@@ -83,11 +133,15 @@ function smoothOnePath(path: paper.Path, thresholdDeg: number) {
     }
     if (between.length === 0) continue;
 
+    // Build a temporary open path: [cornerPt, ...between, nextCornerPt]
+    // Smooth it with Catmull-Rom so every original point is interpolated.
+    // Extract only the interior segments (j=1…len-2); the endpoint segments
+    // are excluded because corners are added separately with zero handles.
     const temp = new paper.Path({ insert: false });
     temp.add(cornerPt);
     for (const p of between) temp.add(p);
     temp.add(path.segments[nextCornerIdx].point.clone());
-    temp.simplify(SIMPLIFY_TOLERANCE);
+    temp.smooth({ type: SMOOTH_TYPE });
 
     for (let j = 1; j < temp.segments.length - 1; j++) {
       const s = temp.segments[j];
