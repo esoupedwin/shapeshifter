@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { useEditor, ToolMode } from '../store/useEditor';
 import { insertImageFromFile } from '../paper/raster';
 import { pasteFromSystemClipboard } from '../paper/clipboardExternal';
+import { insertCustomShape } from '../paper/customShapes';
 
 interface ShapeDef {
   id: ToolMode;
@@ -64,6 +65,8 @@ export default function ShapePalette() {
   const defaultStroke = useEditor((s) => s.defaultStroke);
   const setDefaultFill = useEditor((s) => s.setDefaultFill);
   const setDefaultStroke = useEditor((s) => s.setDefaultStroke);
+  const customShapes = useEditor((s) => s.customShapes);
+  const removeCustomShape = useEditor((s) => s.removeCustomShape);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const onPickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -93,6 +96,42 @@ export default function ShapePalette() {
           </button>
         ))}
       </div>
+
+      {customShapes.length > 0 && (
+        <>
+          <h3>My Shapes</h3>
+          <div className="shape-grid">
+            {customShapes.map((cs) => (
+              <div
+                key={cs.id}
+                className="shape-tile shape-tile--custom"
+                title={cs.name}
+                role="button"
+                tabIndex={0}
+                onClick={() => insertCustomShape(cs.svg)}
+                onKeyDown={(e) => e.key === 'Enter' && insertCustomShape(cs.svg)}
+              >
+                <img
+                  className="shape-tile-img"
+                  src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(cs.svg)}`}
+                  alt={cs.name}
+                  draggable={false}
+                />
+                <button
+                  className="shape-tile-delete"
+                  title={`Remove "${cs.name}" from My Shapes`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeCustomShape(cs.id);
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       <h3>Insert Picture</h3>
       <button

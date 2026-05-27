@@ -117,10 +117,45 @@ body {
   justify-content: center;
   cursor: pointer;
   color: #e6e6e6;
+  position: relative; /* needed for delete badge positioning */
 }
 .shape-tile:hover { background: #454545; }
 .shape-tile.active { background: #0e639c; border-color: #1177bb; }
 .shape-tile svg { width: 22px; height: 22px; }
+
+/* Custom (saved) shape tiles */
+.shape-tile--custom { padding: 3px; }
+.shape-tile-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+
+/* Delete badge — shown on hover, hidden otherwise */
+.shape-tile-delete {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 3px;
+  background: rgba(180, 30, 30, 0.9);
+  border: none;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: bold;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  z-index: 2;
+}
+.shape-tile:hover .shape-tile-delete { display: flex; }
+.shape-tile-delete:hover { background: #c00; }
 
 .canvas-area {
   background: #1a1a1a;

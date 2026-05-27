@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import type { CustomShape } from '../paper/customShapes';
+export type { CustomShape };
 
 export type ToolMode =
   | 'select'
@@ -11,6 +13,25 @@ export type ToolMode =
   | 'drawStar'
   | 'drawLine'
   | 'drawArrow';
+
+// ─── Custom shape persistence ─────────────────────────────────────────────────
+
+const CUSTOM_SHAPES_KEY = 'vd-custom-shapes';
+
+function loadCustomShapes(): CustomShape[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_SHAPES_KEY);
+    return raw ? (JSON.parse(raw) as CustomShape[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistCustomShapes(shapes: CustomShape[]): void {
+  try {
+    localStorage.setItem(CUSTOM_SHAPES_KEY, JSON.stringify(shapes));
+  } catch {}
+}
 
 export interface SelectionStyle {
   fill: string;
@@ -46,6 +67,7 @@ interface EditorState {
   defaultStroke: string;
   contextMenu: ContextMenuState | null;
   selectionIsRaster: boolean;
+  customShapes: CustomShape[];
   setTool: (t: ToolMode) => void;
   setSelection: (
     ids: number[],
@@ -59,6 +81,8 @@ interface EditorState {
   setContextMenu: (cm: ContextMenuState | null) => void;
   setSelectionIsRaster: (v: boolean) => void;
   bumpSelection: () => void;
+  addCustomShape: (shape: CustomShape) => void;
+  removeCustomShape: (id: string) => void;
 }
 
 export const useEditor = create<EditorState>((set) => ({
@@ -74,6 +98,7 @@ export const useEditor = create<EditorState>((set) => ({
   defaultStroke: '#1F3864',
   contextMenu: null,
   selectionIsRaster: false,
+  customShapes: loadCustomShapes(),
   setTool: (tool) => set({ tool }),
   setSelection: (selectedIds, style, transform) =>
     set({ selectedIds, selectionCount: selectedIds.length, style, transform }),
@@ -84,4 +109,16 @@ export const useEditor = create<EditorState>((set) => ({
   setContextMenu: (contextMenu) => set({ contextMenu }),
   setSelectionIsRaster: (selectionIsRaster) => set({ selectionIsRaster }),
   bumpSelection: () => set((s) => ({ selectionVersion: s.selectionVersion + 1 })),
+  addCustomShape: (shape) =>
+    set((s) => {
+      const updated = [...s.customShapes, shape];
+      persistCustomShapes(updated);
+      return { customShapes: updated };
+    }),
+  removeCustomShape: (id) =>
+    set((s) => {
+      const updated = s.customShapes.filter((cs) => cs.id !== id);
+      persistCustomShapes(updated);
+      return { customShapes: updated };
+    }),
 }));

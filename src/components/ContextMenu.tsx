@@ -7,10 +7,13 @@ import {
   sendToBack,
   deleteSelection,
 } from '../paper/arrange';
+import { buildCustomShape } from '../paper/customShapes';
 
 export default function ContextMenu() {
   const ctx = useEditor((s) => s.contextMenu);
   const setCtx = useEditor((s) => s.setContextMenu);
+  const addCustomShape = useEditor((s) => s.addCustomShape);
+  const selectionIsRaster = useEditor((s) => s.selectionIsRaster);
   const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -54,6 +57,24 @@ export default function ContextMenu() {
       <button onClick={run(bringToFront)}>⇈ Bring to Front</button>
       <button onClick={run(sendToBack)}>⇊ Send to Back</button>
       <div className="context-menu-sep" />
+      {!selectionIsRaster && (
+        <button
+          onClick={() => {
+            setCtx(null);
+            const defaultName = 'Custom Shape';
+            const name = window.prompt('Save shape as:', defaultName);
+            if (name === null) return; // user cancelled
+            const shape = buildCustomShape(name);
+            if (!shape) {
+              alert('Could not save — select at least one vector shape (not an image).');
+              return;
+            }
+            addCustomShape(shape);
+          }}
+        >
+          📐 Save as Shape…
+        </button>
+      )}
       <button onClick={run(deleteSelection)}>🗑 Delete</button>
     </div>
   );
