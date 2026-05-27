@@ -3,7 +3,7 @@ import { useEditor } from '../store/useEditor';
 import { refreshOverlay, getSelected } from './selection';
 
 export const MIN_ZOOM = 0.1;
-export const MAX_ZOOM = 10;
+export const MAX_ZOOM = 20;
 
 function clamp(z: number) {
   return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
