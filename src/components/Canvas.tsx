@@ -93,6 +93,8 @@ export default function Canvas() {
     let panning = false;
     let lastClient: { x: number; y: number } | null = null;
     let spaceHeld = false;
+    // Ctrl held in Edit Anchors mode → delete-mode cursor (crosshair)
+    let ctrlHeld = false;
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' && !spaceHeld) {
@@ -102,11 +104,24 @@ export default function Canvas() {
         canvas.style.cursor = 'grab';
         e.preventDefault();
       }
+      if ((e.code === 'ControlLeft' || e.code === 'ControlRight') && !ctrlHeld) {
+        ctrlHeld = true;
+        if (!panning && !spaceHeld && useEditor.getState().tool === 'editPoints') {
+          canvas.style.cursor = 'crosshair';
+        }
+      }
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         spaceHeld = false;
         if (!panning) canvas.style.cursor = '';
+      }
+      if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
+        ctrlHeld = false;
+        // Restore the normal Edit Anchors cursor when Ctrl is released
+        if (!panning && !spaceHeld && useEditor.getState().tool === 'editPoints') {
+          canvas.style.cursor = 'default';
+        }
       }
     };
     const onPointerDown = (e: PointerEvent) => {
@@ -128,6 +143,12 @@ export default function Canvas() {
         canvas.style.cursor = 'grab';
         return;
       }
+      const tool = useEditor.getState().tool;
+      // Ctrl held in Edit Anchors mode → delete-mode cursor (crosshair)
+      if (tool === 'editPoints' && ctrlHeld) {
+        canvas.style.cursor = 'crosshair';
+        return;
+      }
       // Hit-test overlay for selection handles / segment dots / bezier handles.
       const rect = canvas.getBoundingClientRect();
       const viewPt = new paper.Point(e.clientX - rect.left, e.clientY - rect.top);
@@ -141,7 +162,6 @@ export default function Canvas() {
       }
       // Fall back to the tool's default cursor (crosshair while drawing,
       // default otherwise).
-      const tool = useEditor.getState().tool;
       if (tool.startsWith('draw')) canvas.style.cursor = 'crosshair';
       else if (tool === 'editPoints') canvas.style.cursor = 'default';
       else canvas.style.cursor = '';

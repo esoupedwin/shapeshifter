@@ -98,7 +98,7 @@ export default function Toolbar() {
       <div className="group" style={{ fontSize: 11, color: '#888' }}>
         {tool === 'editPoints' && (
           <span>
-            Edit Anchors: click anchor to select • alt+click anchor to delete • drag curve to bend • shift+click edge to insert • Ctrl+Z undo • click "Edit Anchors" button to exit
+            Edit Anchors: click anchor to select • ctrl+click anchor to delete • drag curve to bend • shift+click edge to insert • Ctrl+Z undo • click "✎ Edit Anchors" to exit
           </span>
         )}
         {tool !== 'editPoints' && selectionCount > 0 && (

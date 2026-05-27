@@ -106,6 +106,24 @@ function onMouseDown(event: paper.ToolEvent) {
     const target = getEditPointsTarget();
     if (!target) return;
 
+    // Ctrl held = delete-mode: click near an anchor to remove it.
+    // All other interactions (drag, bend, insert) are suppressed while Ctrl
+    // is held so the user cannot accidentally move an anchor in delete mode.
+    if (event.modifiers.control) {
+      // Scale tolerance by inverse zoom so the hit area stays ~12 screen px
+      // regardless of zoom level.
+      const tol = 12 / paper.view.zoom;
+      const hit = nearestDeletableSegment(target, event.point, tol);
+      if (hit) {
+        pushSnapshot(hit.path);
+        hit.path.removeSegment(hit.index);
+        setSelectedSegment(null, null);
+        refreshOverlay();
+        notifySelectionChanged();
+      }
+      return;
+    }
+
     // 1. Bezier handle hit takes priority — drag handleIn / handleOut
     const overlayHit = hitTestOverlay(event.point);
     if (
@@ -605,4 +623,41 @@ function nearestSegmentIndex(path: paper.Path, point: paper.Point, tolerance: nu
     }
   });
   return best;
+}
+
+/**
+ * Find the nearest deletable segment across ALL sub-paths of a PathItem.
+ * A path is skipped if it has ≤ 3 segments (removing one would leave a
+ * degenerate shape). Returns null when nothing is within tolerance.
+ * Tolerance is in project (canvas) units.
+ */
+function nearestDeletableSegment(
+  target: paper.PathItem,
+  point: paper.Point,
+  tolerance: number,
+): { path: paper.Path; index: number } | null {
+  const paths: paper.Path[] = [];
+  if (target instanceof paper.Path) {
+    paths.push(target);
+  } else if (target instanceof paper.CompoundPath) {
+    for (const child of target.children) {
+      if (child instanceof paper.Path) paths.push(child);
+    }
+  }
+  let bestPath: paper.Path | null = null;
+  let bestIndex = -1;
+  let bestDist = tolerance;
+  for (const path of paths) {
+    if (path.segments.length <= 3) continue; // deleting would make a degenerate shape
+    path.segments.forEach((seg, idx) => {
+      const d = seg.point.getDistance(point);
+      if (d < bestDist) {
+        bestDist = d;
+        bestPath = path;
+        bestIndex = idx;
+      }
+    });
+  }
+  if (!bestPath || bestIndex === -1) return null;
+  return { path: bestPath, index: bestIndex };
 }
