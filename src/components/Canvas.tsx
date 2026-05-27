@@ -60,6 +60,9 @@ export default function Canvas() {
 
     const onContextMenu = (e: MouseEvent) => {
       e.preventDefault();
+      // While in Edit Anchors mode, suppress all context-menu interactions so
+      // the user cannot accidentally select, deselect, or modify other shapes.
+      if (selection.getEditPointsTarget()) return;
       const rect = canvas.getBoundingClientRect();
       const viewPoint = new paper.Point(e.clientX - rect.left, e.clientY - rect.top);
       const projectPoint = paper.view.viewToProject(viewPoint);

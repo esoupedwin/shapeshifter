@@ -38,15 +38,15 @@ export default function Toolbar() {
       </div>
 
       <div className="group">
-        <Dropdown label="Edit Shape" disabled={singleSelectionDisabled}>
-          {tool === 'editPoints' ? (
-            <button onClick={exitEditPoints}>✓ Exit Edit Points</button>
-          ) : (
-            <button onClick={enterEditPoints} disabled={singleSelectionDisabled}>
-              ✎ Edit Points
-            </button>
-          )}
-        </Dropdown>
+        <button
+          className="btn"
+          onClick={tool === 'editPoints' ? exitEditPoints : enterEditPoints}
+          disabled={tool !== 'editPoints' && singleSelectionDisabled}
+          style={{ fontWeight: tool === 'editPoints' ? 'bold' : undefined }}
+          title={tool === 'editPoints' ? 'Click to exit anchor editing' : 'Edit anchor points of the selected shape'}
+        >
+          {tool === 'editPoints' ? '✓ Edit Anchors' : '✎ Edit Anchors'}
+        </button>
 
         <Dropdown label="Merge Shapes" disabled={mergeDisabled}>
           <button onClick={applyUnion} disabled={mergeDisabled}>⬭ Union</button>
@@ -98,7 +98,7 @@ export default function Toolbar() {
       <div className="group" style={{ fontSize: 11, color: '#888' }}>
         {tool === 'editPoints' && (
           <span>
-            Edit Points: click anchor to select • Delete to remove • drag curve to bend • shift+click edge to insert • Ctrl+Z undo
+            Edit Anchors: click anchor to select • alt+click anchor to delete • drag curve to bend • shift+click edge to insert • Ctrl+Z undo • click "Edit Anchors" button to exit
           </span>
         )}
         {tool !== 'editPoints' && selectionCount > 0 && (

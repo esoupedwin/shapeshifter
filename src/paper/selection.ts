@@ -48,7 +48,11 @@ export function setSelectedSegment(path: paper.Path | null, index: number | null
 
 export function clearSelection() {
   selected.length = 0;
-  editPointsTarget = null;
+  // NOTE: editPointsTarget is intentionally NOT cleared here.
+  // Edit Anchors mode can only be exited by the "Edit Anchors" button
+  // (which calls setEditPointsTarget(null) directly). Any other path through
+  // clearSelection — context menu, marquee, tool changes — must not exit the
+  // mode unintentionally.
   refreshOverlay();
   pushToStore();
 }

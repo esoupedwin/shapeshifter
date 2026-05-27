@@ -67,9 +67,10 @@ function onToolChange(newMode: ToolMode) {
   if (newMode !== 'select' && newMode !== 'editPoints') {
     clearSelection();
     setEditPointsTarget(null);
-  } else if (newMode === 'select') {
-    setEditPointsTarget(null);
   }
+  // When switching to 'select', preserve editPointsTarget — Edit Anchors mode
+  // must only be exited by clicking the "Edit Anchors" button, not by any
+  // indirect tool switch (e.g. clicking empty canvas which briefly sets 'select').
 }
 
 function hitTestOverlay(point: paper.Point) {
@@ -173,13 +174,10 @@ function onMouseDown(event: paper.ToolEvent) {
     }
 
     // 5. Click in empty space — deselect the current anchor (handles disappear).
-    //    Click again in empty space (with no anchor selected) exits edit-points.
+    //    Edit Anchors mode remains active; only the "Edit Anchors" button exits it.
     if (getSelectedSegment()) {
       setSelectedSegment(null, null);
-      return;
     }
-    setEditPointsTarget(null);
-    useEditor.getState().setTool('select');
     return;
   }
 
