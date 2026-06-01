@@ -87,10 +87,7 @@ export default function Toolbar() {
               const writePromise = copySelectionToClipboard();
               writePromise.then((ok) => {
                 if (!ok)
-                  alert(
-                    'Could not copy to clipboard.\n' +
-                    'Make sure the app is running on localhost or HTTPS and try again.',
-                  );
+                  alert('Could not copy — make sure the shape is visible on the canvas and try again.');
               });
             }}
             title="Copy selected shapes to the system clipboard as PNG — paste directly into PowerPoint with Ctrl+V"

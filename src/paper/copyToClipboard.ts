@@ -1,78 +1,32 @@
 import paper from 'paper';
 import { getSelected } from './selection';
-
-// ─── SVG serialisation ────────────────────────────────────────────────────────
-
-function buildSVG(items: paper.PathItem[]): { svg: string; w: number; h: number } | null {
-  let bounds: paper.Rectangle | null = null;
-  for (const item of items) {
-    const b = item.strokeBounds;
-    bounds = bounds ? bounds.unite(b) : b;
-  }
-  if (!bounds || bounds.width < 1 || bounds.height < 1) return null;
-
-  const offset = bounds.topLeft;
-  const clones = items.map((item) => {
-    const c = item.clone({ insert: false });
-    c.translate(offset.multiply(-1));
-    return c;
-  });
-
-  const serializer = new XMLSerializer();
-  const parts = clones.map((c) => serializer.serializeToString(c.exportSVG() as Element));
-
-  const w = Math.round(bounds.width);
-  const h = Math.round(bounds.height);
-  const svg = [
-    `<svg xmlns="http://www.w3.org/2000/svg"`,
-    ` width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`,
-    ...parts,
-    `</svg>`,
-  ].join('');
-
-  return { svg, w, h };
-}
-
-// ─── PNG rendering ────────────────────────────────────────────────────────────
-
-function svgToPNGBlob(svgStr: string, renderW: number, renderH: number): Promise<Blob | null> {
-  return new Promise((resolve) => {
-    const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = renderW;
-      canvas.height = renderH;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) { URL.revokeObjectURL(url); resolve(null); return; }
-      ctx.drawImage(img, 0, 0, renderW, renderH);
-      URL.revokeObjectURL(url);
-      canvas.toBlob((b) => resolve(b), 'image/png');
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
-    img.src = url;
-  });
-}
-
-// ─── Public API ───────────────────────────────────────────────────────────────
+import { getOverlayLayer } from './setup';
 
 /**
  * Copy the current vector selection to the system clipboard as a PNG so it
  * can be pasted into PowerPoint (or any other app) with Ctrl+V.
  *
- * IMPORTANT — this function must be called synchronously inside a user-gesture
- * handler (click / keydown). It is deliberately NOT an async function: it calls
- * navigator.clipboard.write() before yielding to the event loop, which keeps
- * the browser's user-gesture permission grant alive.  Passing a Promise<Blob>
- * to ClipboardItem is the correct pattern — the browser resolves the blob
- * after the write() call is accepted.
+ * Strategy — capture directly from the rendered Paper.js canvas:
+ *   1. Hide the selection-handles overlay so it doesn't appear in the copy.
+ *   2. Force Paper.js to re-draw (synchronous Canvas 2D API calls).
+ *   3. Crop the relevant canvas region with drawImage (synchronous).
+ *   4. Read the pixel data with canvas.toDataURL() (synchronous).
+ *   5. Convert the data URL to a Blob (synchronous).
+ *   6. Restore the overlay.
+ *   7. Call navigator.clipboard.write() with a real Blob — NOT a Promise<Blob>.
  *
- * Returns a Promise<boolean>: true = written successfully, false = failed
- * (clipboard API unavailable, permission denied, or selection is empty).
+ * Steps 1-6 are all synchronous so by the time clipboard.write() is called
+ * no event-loop yield has occurred and the browser still considers this call
+ * to be within the original user-gesture context.
+ *
+ * This avoids the SVG→Image→Canvas async pipeline entirely, which was the
+ * root cause of previous failures (silent empty-blob on onerror, user-gesture
+ * expiry, and Chrome's limited ClipboardItem type support).
+ *
+ * Returns a Promise<boolean>: true = written successfully, false = failed.
+ * Must be called synchronously inside a user-gesture handler (click/keydown).
  */
 export function copySelectionToClipboard(): Promise<boolean> {
-  // Guard: Clipboard API must be available (requires HTTPS or localhost).
   if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
     return Promise.resolve(false);
   }
@@ -83,27 +37,76 @@ export function copySelectionToClipboard(): Promise<boolean> {
   );
   if (items.length === 0) return Promise.resolve(false);
 
-  const built = buildSVG(items);
-  if (!built) return Promise.resolve(false);
+  // Combined stroke bounds — includes thick outlines so they aren't clipped.
+  let bounds: paper.Rectangle | null = null;
+  for (const item of items) {
+    const b = item.strokeBounds;
+    bounds = bounds ? bounds.unite(b) : b;
+  }
+  if (!bounds || bounds.width < 1 || bounds.height < 1) return Promise.resolve(false);
 
-  const { svg, w, h } = built;
+  // Get the canvas element Paper.js renders into.
+  const paperCanvas = document.getElementById('paper-canvas') as HTMLCanvasElement | null;
+  if (!paperCanvas) return Promise.resolve(false);
 
-  // Render at 2× for crisp edges; cap at 4 000 px to avoid huge bitmaps.
-  const renderScale = Math.min(2, 4000 / Math.max(w, h));
-  const renderW = Math.max(1, Math.round(w * renderScale));
-  const renderH = Math.max(1, Math.round(h * renderScale));
+  // ── 1-2. Hide overlay and re-render synchronously ──────────────────────────
+  const overlay = getOverlayLayer();
+  overlay.visible = false;
+  paper.view.update(); // writes to canvas immediately via Canvas 2D API
 
-  // Start the async PNG render and pass the Promise straight into ClipboardItem.
-  // The write() call below happens synchronously — the browser records the
-  // user-gesture grant now and resolves the blob internally afterwards.
-  const pngPromise: Promise<Blob> = svgToPNGBlob(svg, renderW, renderH).then(
-    (b) => b ?? new Blob([], { type: 'image/png' }),
-  );
+  // ── 3. Crop the canvas region that covers the selection ────────────────────
+  // projectToView gives CSS-pixel coordinates; multiply by devicePixelRatio to
+  // get physical canvas pixel coordinates (Paper.js uses a HiDPI canvas).
+  const tl = paper.view.projectToView(bounds.topLeft);
+  const br = paper.view.projectToView(bounds.bottomRight);
+  const dpr = window.devicePixelRatio || 1;
 
-  // ← navigator.clipboard.write() is called here, synchronously, so the
-  //   user-gesture context is still active when the browser checks permission.
+  const srcX = Math.round(Math.max(0, tl.x * dpr));
+  const srcY = Math.round(Math.max(0, tl.y * dpr));
+  const srcW = Math.round(Math.min((br.x - tl.x) * dpr, paperCanvas.width  - srcX));
+  const srcH = Math.round(Math.min((br.y - tl.y) * dpr, paperCanvas.height - srcY));
+
+  let pngBlob: Blob | null = null;
+
+  if (srcW > 0 && srcH > 0) {
+    // Scale the output to ~2× the view-space size for crisp edges in PowerPoint,
+    // capped at 4 000 px so we don't produce absurdly large bitmaps.
+    const outScale = Math.min(2, 4000 / Math.max(srcW, srcH));
+    const outW = Math.max(1, Math.round(srcW * outScale));
+    const outH = Math.max(1, Math.round(srcH * outScale));
+
+    const outCanvas = document.createElement('canvas');
+    outCanvas.width  = outW;
+    outCanvas.height = outH;
+    const ctx = outCanvas.getContext('2d');
+
+    if (ctx) {
+      ctx.drawImage(paperCanvas, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
+
+      // ── 4. Read pixels synchronously as a data URL ─────────────────────────
+      const dataURL = outCanvas.toDataURL('image/png');
+
+      // ── 5. Convert data URL → Blob synchronously ───────────────────────────
+      const b64 = dataURL.slice('data:image/png;base64,'.length);
+      const byteChars = atob(b64);
+      const bytes = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+      pngBlob = new Blob([bytes], { type: 'image/png' });
+    }
+  }
+
+  // ── 6. Restore overlay ─────────────────────────────────────────────────────
+  overlay.visible = true;
+  paper.view.update();
+
+  if (!pngBlob) return Promise.resolve(false);
+
+  // ── 7. Write real Blob to clipboard (still within user-gesture context) ────
   return navigator.clipboard
-    .write([new ClipboardItem({ 'image/png': pngPromise })])
+    .write([new ClipboardItem({ 'image/png': pngBlob })])
     .then(() => true)
-    .catch(() => false);
+    .catch((err) => {
+      console.error('[copy] clipboard.write failed:', err);
+      return false;
+    });
 }

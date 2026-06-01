@@ -63,10 +63,7 @@ export default function ContextMenu() {
             setCtx(null);
             writePromise.then((ok) => {
               if (!ok)
-                alert(
-                  'Could not copy to clipboard.\n' +
-                  'Make sure the app is running on localhost or HTTPS and try again.',
-                );
+                alert('Could not copy — make sure the shape is visible on the canvas and try again.');
             });
           }}
         >
