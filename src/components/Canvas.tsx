@@ -11,6 +11,7 @@ import { useEditor } from '../store/useEditor';
 import { refreshLayerNames } from '../paper/selection';
 import { tryPasteExternal } from '../paper/clipboardExternal';
 import { pasteClipboard } from '../paper/clipboard';
+import { pushProjectSnapshot } from '../paper/editHistory';
 
 function cursorForHandle(handle: string): string {
   switch (handle) {
@@ -96,6 +97,10 @@ export default function Canvas() {
     // Ctrl held in Edit Anchors mode → delete-mode cursor (crosshair)
     let ctrlHeld = false;
 
+    // Debounce arrow-key nudges so rapid presses collapse into one undo entry.
+    let arrowSnapshotAt = 0;
+    const ARROW_COALESCE_MS = 500;
+
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' && !spaceHeld) {
         const target = e.target as HTMLElement | null;
@@ -109,6 +114,34 @@ export default function Canvas() {
         if (!panning && !spaceHeld && useEditor.getState().tool === 'editPoints') {
           canvas.style.cursor = 'crosshair';
         }
+      }
+      // Arrow keys — nudge selected shapes (not active when editing anchors or
+      // when an input field has focus).
+      if (
+        e.code === 'ArrowUp' || e.code === 'ArrowDown' ||
+        e.code === 'ArrowLeft' || e.code === 'ArrowRight'
+      ) {
+        const target = e.target as HTMLElement | null;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+        const state = useEditor.getState();
+        if (state.tool === 'editPoints') return; // reserved for anchor editing
+        if (state.selectionCount === 0) return;
+        e.preventDefault();
+        // Shift = 10× step for coarser movement
+        const step = e.shiftKey ? 10 : 1;
+        const dx = e.code === 'ArrowLeft' ? -step : e.code === 'ArrowRight' ? step : 0;
+        const dy = e.code === 'ArrowUp'   ? -step : e.code === 'ArrowDown'  ? step : 0;
+        // Coalesced snapshot: rapid presses within 500 ms share one undo entry
+        const now = Date.now();
+        if (now - arrowSnapshotAt > ARROW_COALESCE_MS) {
+          pushProjectSnapshot();
+          arrowSnapshotAt = now;
+        }
+        const delta = new paper.Point(dx, dy);
+        for (const it of selection.getSelected()) {
+          it.position = it.position.add(delta);
+        }
+        selection.notifySelectionChanged();
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
