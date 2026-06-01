@@ -8,6 +8,7 @@ import {
   deleteSelection,
 } from '../paper/arrange';
 import { buildCustomShape } from '../paper/customShapes';
+import { copySelectionToClipboard } from '../paper/copyToClipboard';
 
 export default function ContextMenu() {
   const ctx = useEditor((s) => s.contextMenu);
@@ -52,6 +53,25 @@ export default function ContextMenu() {
       style={{ left: ctx.x, top: ctx.y }}
       onContextMenu={(e) => e.preventDefault()}
     >
+      {!selectionIsRaster && (
+        <button
+          onClick={() => {
+            setCtx(null);
+            copySelectionToClipboard().then((result) => {
+              if (!result) {
+                alert(
+                  'Could not copy to clipboard.\n' +
+                  'Make sure the app is served over HTTPS (or localhost) and ' +
+                  'try again from Chrome or Edge.',
+                );
+              }
+            });
+          }}
+        >
+          📋 Copy for PowerPoint
+        </button>
+      )}
+      <div className="context-menu-sep" />
       <button onClick={run(bringForward)}>↑ Bring Forward</button>
       <button onClick={run(sendBackward)}>↓ Send Backward</button>
       <button onClick={run(bringToFront)}>⇈ Bring to Front</button>

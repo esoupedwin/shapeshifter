@@ -3,6 +3,7 @@ import Dropdown from './Dropdown';
 import { useEditor } from '../store/useEditor';
 import { applyUnion, applyCombine, applyFragment, applyIntersect, applySubtract } from '../paper/boolean';
 import { exportPNG, exportSVG } from '../paper/export';
+import { copySelectionToClipboard } from '../paper/copyToClipboard';
 import { bringForward, sendBackward, bringToFront, sendToBack, deleteSelection } from '../paper/arrange';
 import { getSelected, setEditPointsTarget } from '../paper/selection';
 import { zoomIn, zoomOut, resetView, fitContent, setZoom } from '../paper/view';
@@ -78,6 +79,23 @@ export default function Toolbar() {
         <Dropdown label="Export">
           <button onClick={() => exportPNG()}>🖼 Export PNG</button>
           <button onClick={() => exportSVG()}>📄 Export SVG</button>
+          <button
+            disabled={selectionCount === 0}
+            onClick={() =>
+              copySelectionToClipboard().then((result) => {
+                if (!result) {
+                  alert(
+                    'Could not copy to clipboard.\n' +
+                    'Make sure the app is served over HTTPS (or localhost) and ' +
+                    'try again from Chrome or Edge.',
+                  );
+                }
+              })
+            }
+            title="Copy selected shapes to the system clipboard as SVG + PNG — paste directly into PowerPoint with Ctrl+V"
+          >
+            📋 Copy for PowerPoint
+          </button>
         </Dropdown>
       </div>
 
