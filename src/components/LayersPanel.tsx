@@ -30,20 +30,27 @@ export default function LayersPanel() {
       <h3>Layers</h3>
       <div className="layers-list">
         {layers.length === 0 && <p style={{ fontSize: 12, color: '#888' }}>(empty)</p>}
-        {layers.map((l) => (
-          <div
-            key={l.id}
-            className={`layer-item ${selectedIds.includes(l.id) ? 'selected' : ''}`}
-            style={editMode ? { pointerEvents: 'none', opacity: 0.5 } : undefined}
-            onClick={() => {
-              if (editMode) return;
-              const item = findItemById(l.id);
-              if (item) selectItem(item);
-            }}
-          >
-            <span>{l.name}</span>
-          </div>
-        ))}
+        {layers.map((l) => {
+          const selOrder = selectedIds.indexOf(l.id); // -1 = not selected
+          const isSelected = selOrder >= 0;
+          return (
+            <div
+              key={l.id}
+              className={`layer-item ${isSelected ? 'selected' : ''}`}
+              style={editMode ? { pointerEvents: 'none', opacity: 0.5 } : undefined}
+              onClick={() => {
+                if (editMode) return;
+                const item = findItemById(l.id);
+                if (item) selectItem(item);
+              }}
+            >
+              <span>{l.name}</span>
+              {isSelected && selectedIds.length >= 2 && (
+                <span className="layer-order-badge">{selOrder + 1}</span>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

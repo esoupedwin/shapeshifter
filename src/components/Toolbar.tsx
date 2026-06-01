@@ -101,8 +101,11 @@ export default function Toolbar() {
             Edit Anchors: click anchor to select • ctrl+click anchor to delete • drag curve to bend • shift+click edge to insert • Ctrl+Z undo • click "✎ Edit Anchors" to exit
           </span>
         )}
-        {tool !== 'editPoints' && selectionCount > 0 && (
-          <span>{selectionCount} selected</span>
+        {tool !== 'editPoints' && selectionCount === 1 && (
+          <span>1 selected — shift+click to add more (order matters for Subtract &amp; Intersect)</span>
+        )}
+        {tool !== 'editPoints' && selectionCount > 1 && (
+          <span>{selectionCount} selected in order — shift+click to add/remove</span>
         )}
       </div>
     </div>

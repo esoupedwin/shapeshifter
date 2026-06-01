@@ -204,10 +204,28 @@ body {
   font-size: 12px;
   cursor: pointer;
   display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: 4px;
 }
 .layer-item:hover { background: #454545; }
 .layer-item.selected { background: #0e639c; }
+
+/* Selection-order badge shown inside layer rows when ≥2 shapes are selected */
+.layer-order-badge {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  color: #0e639c;
+  font-size: 10px;
+  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
 
 .hint {
   position: absolute;

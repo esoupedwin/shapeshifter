@@ -209,6 +209,47 @@ export function refreshOverlay() {
   rotHandle.strokeWidth = 1 / zoom;
   rotHandle.data.handle = 'rotate';
 
+  // When multiple items are selected, draw per-item dashed outlines and
+  // numbered badges so the user can see which shape is #1, #2, etc.
+  // The selection order drives boolean ops (subtract, intersect) — #1 is the
+  // base shape whose style and geometry is preserved.
+  if (selected.length >= 2) {
+    for (let si = 0; si < selected.length; si++) {
+      const item = selected[si];
+      const ib = item.strokeBounds;
+
+      // Thin solid outline per item (the combined dashed bbox is still shown
+      // for the resize/rotate handles — this one highlights each item individually)
+      const perRect = new paper.Path.Rectangle(ib);
+      perRect.strokeColor = new paper.Color('#4a9eff');
+      perRect.strokeWidth = 1 / zoom;
+      perRect.fillColor = null;
+      perRect.data.overlay = true;
+
+      // Number badge at top-right corner of the item
+      const r = 8 / zoom;
+      const badgeCenter = new paper.Point(ib.right - r * 0.6, ib.top + r * 0.6);
+
+      const badgeBg = new paper.Path.Circle(badgeCenter, r);
+      badgeBg.fillColor = new paper.Color('#0e639c');
+      badgeBg.strokeColor = new paper.Color('#ffffff');
+      badgeBg.strokeWidth = 1 / zoom;
+      badgeBg.data.overlay = true;
+
+      // PointText — baseline sits at the given point; shift down ~35% of
+      // font size to visually centre the digit inside the circle.
+      const fontSize = r * 1.4;
+      const label = new paper.PointText(badgeCenter.add(new paper.Point(0, fontSize * 0.35)));
+      label.content = String(si + 1);
+      label.fillColor = new paper.Color('#ffffff');
+      label.fontSize = fontSize;
+      label.fontFamily = 'sans-serif';
+      label.fontWeight = 'bold';
+      label.justification = 'center';
+      label.data.overlay = true;
+    }
+  }
+
   activateContent();
 }
 
