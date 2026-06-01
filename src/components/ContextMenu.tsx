@@ -56,15 +56,17 @@ export default function ContextMenu() {
       {!selectionIsRaster && (
         <button
           onClick={() => {
+            // copySelectionToClipboard() MUST be called before setCtx(null) so
+            // that navigator.clipboard.write() fires inside the user-gesture
+            // context (before any React state update can yield the event loop).
+            const writePromise = copySelectionToClipboard();
             setCtx(null);
-            copySelectionToClipboard().then((result) => {
-              if (!result) {
+            writePromise.then((ok) => {
+              if (!ok)
                 alert(
                   'Could not copy to clipboard.\n' +
-                  'Make sure the app is served over HTTPS (or localhost) and ' +
-                  'try again from Chrome or Edge.',
+                  'Make sure the app is running on localhost or HTTPS and try again.',
                 );
-              }
             });
           }}
         >

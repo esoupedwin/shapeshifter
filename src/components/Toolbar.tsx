@@ -81,18 +81,19 @@ export default function Toolbar() {
           <button onClick={() => exportSVG()}>📄 Export SVG</button>
           <button
             disabled={selectionCount === 0}
-            onClick={() =>
-              copySelectionToClipboard().then((result) => {
-                if (!result) {
+            onClick={() => {
+              // Call synchronously inside the click handler so the browser
+              // grants the clipboard-write permission before yielding.
+              const writePromise = copySelectionToClipboard();
+              writePromise.then((ok) => {
+                if (!ok)
                   alert(
                     'Could not copy to clipboard.\n' +
-                    'Make sure the app is served over HTTPS (or localhost) and ' +
-                    'try again from Chrome or Edge.',
+                    'Make sure the app is running on localhost or HTTPS and try again.',
                   );
-                }
-              })
-            }
-            title="Copy selected shapes to the system clipboard as SVG + PNG — paste directly into PowerPoint with Ctrl+V"
+              });
+            }}
+            title="Copy selected shapes to the system clipboard as PNG — paste directly into PowerPoint with Ctrl+V"
           >
             📋 Copy for PowerPoint
           </button>
