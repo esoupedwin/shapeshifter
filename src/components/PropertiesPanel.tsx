@@ -3,6 +3,7 @@ import { useEditor } from '../store/useEditor';
 import { getSelected, notifySelectionChanged } from '../paper/selection';
 import { traceRasterToVector, TraceDetail } from '../paper/trace';
 import { smoothSelection, DEFAULT_CORNER_THRESHOLD } from '../paper/smooth';
+import { pixelateSelection } from '../paper/pixelate';
 import { pushProjectSnapshot } from '../paper/editHistory';
 import paper from 'paper';
 
@@ -27,6 +28,8 @@ export default function PropertiesPanel() {
   const [detail, setDetail] = useState<TraceDetail>('medium');
   const [tracing, setTracing] = useState(false);
   const [cornerThreshold, setCornerThreshold] = useState<number>(DEFAULT_CORNER_THRESHOLD);
+  const [pixelCols, setPixelCols] = useState(16);
+  const [pixelating, setPixelating] = useState(false);
 
   if (selectionCount === 0 || !style || !transform) {
     return (
@@ -59,6 +62,24 @@ export default function PropertiesPanel() {
 
   const runSmooth = () => {
     smoothSelection(cornerThreshold);
+  };
+
+  // Pixel rows derived from shape aspect ratio so cells stay square.
+  const pixelRows =
+    transform && transform.width > 0
+      ? Math.max(1, Math.round(transform.height / (transform.width / pixelCols)))
+      : pixelCols;
+
+  const runPixelate = async () => {
+    setPixelating(true);
+    try {
+      const ok = await pixelateSelection(pixelCols);
+      if (!ok) alert('Nothing to pixelate — make sure the shape has a visible fill or stroke.');
+    } catch (err) {
+      console.error('Pixelate failed:', err);
+    } finally {
+      setPixelating(false);
+    }
   };
 
   const updateFill = (color: string) => {
@@ -169,6 +190,33 @@ export default function PropertiesPanel() {
             title="Smooth polygonal arcs while keeping sharp corners. Lower the threshold (~60°) to preserve sharp polygon corners; raise it (~120°) to fully smooth rounded shapes."
           >
             ⌒ Smooth curves
+          </button>
+        </>
+      )}
+
+      {hasPathSelection && (
+        <>
+          <h3>Pixel Art</h3>
+          <div className="field">
+            <label>Grid: {pixelCols} × {pixelRows} cells</label>
+            <input
+              type="range"
+              min={4}
+              max={64}
+              step={4}
+              value={pixelCols}
+              onChange={(e) => setPixelCols(Number(e.target.value))}
+              disabled={pixelating}
+            />
+          </div>
+          <button
+            className="btn"
+            onClick={runPixelate}
+            disabled={pixelating}
+            style={{ width: '100%' }}
+            title="Replace the selected shape with a grid of coloured squares — each square is one pixel of pixel art"
+          >
+            {pixelating ? 'Pixelating…' : '⊞ Pixelate'}
           </button>
         </>
       )}
